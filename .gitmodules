@@ -4,3 +4,7 @@
 [submodule "external/vkvg-svg"]
 	path = external/vkvg-svg
 	url = https://github.com/jpbruyere/vkvg-svg.git
+[submodule "vkh"]
+	path = vkh
+	url = ../vkhelpers
+	branch = tmpsavebranch
