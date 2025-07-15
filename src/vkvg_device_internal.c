@@ -366,9 +366,11 @@ void _device_setupPipelines(VkvgDevice dev) {
     VK_CHECK_RESULT(
         vkCreateGraphicsPipelines(dev->vkDev, dev->pipelineCache, 1, &pipelineCreateInfo, NULL, &dev->pipe_SUB));
 
-    colorBlendState.logicOpEnable    = VK_TRUE;
     blendAttachmentState.blendEnable = VK_FALSE;
-    colorBlendState.logicOp          = VK_LOGIC_OP_CLEAR;
+    VK_CHECK_RESULT(
+        vkCreateGraphicsPipelines(dev->vkDev, dev->pipelineCache, 1, &pipelineCreateInfo, NULL, &dev->pipe_SOURCE));
+    colorBlendState.logicOpEnable = VK_TRUE;
+    colorBlendState.logicOp       = VK_LOGIC_OP_CLEAR;
     VK_CHECK_RESULT(
         vkCreateGraphicsPipelines(dev->vkDev, dev->pipelineCache, 1, &pipelineCreateInfo, NULL, &dev->pipe_CLEAR));
 

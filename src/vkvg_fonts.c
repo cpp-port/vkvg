@@ -345,20 +345,64 @@ _char_ref *_prepare_char(VkvgDevice dev, VkvgText tr, uint32_t gindex) {
             data[(penX + x + y * FONT_PAGE_SIZE) * 4 + 2] = r;
             data[(penX + x + y * FONT_PAGE_SIZE) * 4 + 3] = (r + g + b) / 3;
 #else
+#ifdef WIN32
+            data[penX + x + y * FONT_PAGE_SIZE] = buffer[x + (bmpRows -y-1) * bmpPixelWidth];
+#else
             data[penX + x + y * FONT_PAGE_SIZE] = buffer[x + y * bmpPixelWidth];
+#endif
 #endif
         }
     }
-    cr->bmpDiff.x = (int16_t)slot->bitmap_left;
+
+    #ifdef WIN32
+//    int   timesize = bmpPixelWidth;
+//    int   scan     = FONT_PAGE_SIZE;
+//    char* ptime    = (char*)malloc(timesize);
+//    char* pdata    = (char*)(data + penX);
+//    for (int i = 0; i < bmpRows / 2; i++) {
+//        char* plineBeg = pdata + scan * i;
+//        char* plineEnd = pdata + scan * (bmpRows - i - 1);
+//        memcpy(ptime, plineBeg, timesize);
+//        memcpy(plineBeg, plineEnd, timesize);
+//        memcpy(plineEnd, ptime, timesize);
+//    }
+//    free(ptime);
+    cr->bmpDiff.y = (int16_t)bmpRows - slot->bitmap_top;
+#else
     cr->bmpDiff.y = (int16_t)slot->bitmap_top;
+//
+#endif
+
+    cr->bmpDiff.x = (int16_t)slot->bitmap_left;
     cr->advance   = slot->advance;
 #else
     int      advance;
     int      lsb;
     stbtt_GetGlyphHMetrics(pStbInfo, gindex, &advance, &lsb);
     stbtt_MakeGlyphBitmap(pStbInfo, data + penX, bmpPixelWidth, bmpRows, FONT_PAGE_SIZE, f->scale, f->scale, gindex);
-    cr->bmpDiff.x = (int16_t)c_x1;
+#ifdef WIN32
+    int                                timesize = bmpPixelWidth;
+    int                                scan   = FONT_PAGE_SIZE;
+    char*                              ptime    = (char*)malloc(timesize);
+    char*                              pdata  = (char*)(data + penX);
+    for (int i = 0; i < bmpRows / 2; i++)
+    {
+        char * plineBeg = pdata + scan * i;
+        char * plineEnd = pdata + scan * (bmpRows - i -1);
+        memcpy(ptime, plineBeg, timesize);
+        memcpy(plineBeg, plineEnd, timesize);
+        memcpy(plineEnd, ptime, timesize);
+
+    }
+    free(ptime);
+    cr->bmpDiff.y = (int16_t)bmpRows + c_y1;
+#else
     cr->bmpDiff.y = (int16_t)-c_y1;
+
+#endif
+
+
+    cr->bmpDiff.x = (int16_t)c_x1;
     cr->advance   = (vec2){(uint32_t)roundf(f->scale * advance) << 6, 0};
 #endif
     vec4 uvBounds = {{(float)(penX + f->curLine.penX) / (float)FONT_PAGE_SIZE},
@@ -432,7 +476,7 @@ _vkvg_font_t *_find_or_create_font_size(VkvgContext ctx) {
     _font_cache_t *cache = (_font_cache_t *)ctx->dev->fontCache;
     FT_CHECK_RESULT(FT_New_Memory_Face(cache->library, font->fontBuffer, font->fontBufSize, 0, &newSize.face));
     FT_CHECK_RESULT(FT_Set_Char_Size(newSize.face, 0, newSize.charSize, dev->hdpi, dev->vdpi));
-
+    FT_CHECK_RESULT(FT_Select_Charmap(newSize.face, FT_ENCODING_UNICODE));
     newSize.charLookup = (_char_ref **)calloc(newSize.face->num_glyphs, sizeof(_char_ref *));
 
     if (FT_IS_SCALABLE(newSize.face))
@@ -607,6 +651,19 @@ void _font_cache_text_extents(VkvgContext ctx, const char *text, int length, vkv
 
     _font_cache_destroy_text_run(&tr);
 }
+#ifdef _WIN32
+int utf8_to_wide(wchar_t* wide, const char* utf8, int wide_max) {
+    auto len = MultiByteToWideChar(CP_UTF8, 0, utf8, -1, wide, wide_max);
+
+    if (len > 0)
+    {
+        return len - 1;
+
+    }
+    return  0;
+}
+#define mbstowcs utf8_to_wide
+#endif
 // text is expected as utf8 encoded
 // if length is < 0, text must be null terminated, else it contains glyph count
 void _font_cache_create_text_run(VkvgContext ctx, const char *text, int length, VkvgText textRun) {
@@ -633,7 +690,7 @@ void _font_cache_create_text_run(VkvgContext ctx, const char *text, int length, 
     else
         wsize = (size_t)length;
     wchar_t *tmp         = (wchar_t *)malloc((wsize + 1) * sizeof(wchar_t));
-    textRun->glyph_count = mbstowcs(tmp, text, wsize);
+    textRun->glyph_count = mbstowcs(tmp, text, wsize + 1);
     textRun->glyphs      = (vkvg_glyph_info_t *)malloc(textRun->glyph_count * sizeof(vkvg_glyph_info_t));
     for (unsigned int i = 0; i < textRun->glyph_count; i++) {
 #ifdef VKVG_USE_FREETYPE

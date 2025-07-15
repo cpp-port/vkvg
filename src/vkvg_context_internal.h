@@ -76,8 +76,8 @@ typedef struct {
     vec2          size;
     uint32_t      fsq_patternType;
     float         opacity;
-    vkvg_matrix_t mat;
-    vkvg_matrix_t matInv;
+    vkvg_matrix_t mat2;
+    vkvg_matrix_t matInv2;
 } push_constants;
 
 /* context.curClipState may be one of the following, it's set
@@ -116,11 +116,13 @@ typedef struct _vkvg_context_save_t {
     char                   selectedFontName[FONT_NAME_MAX_SIZE];
     _vkvg_font_identity_t  selectedFont; // hold current face and size before cache addition
     _vkvg_font_identity_t *currentFont;  // font ready for lookup
+    _vkvg_font_t*          currentFontSize;  // font ready for lookup
     vkvg_direction_t       textDirection;
     push_constants         pushConsts;
     uint32_t               curColor;
     VkvgPattern            pattern;
     vkvg_clip_state_t      clippingState;
+    vkvg_matrix_t          mat1;
 
 } vkvg_context_save_t;
 
@@ -227,6 +229,7 @@ typedef struct _vkvg_context_t {
 
     VkClearRect           clearRect;
     VkRenderPassBeginInfo renderPassBeginInfo;
+    vkvg_matrix_t         mat1;
 } vkvg_context;
 
 typedef struct _ear_clip_point {

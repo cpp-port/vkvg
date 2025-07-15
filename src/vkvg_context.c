@@ -56,12 +56,13 @@ void _init_ctx(VkvgContext ctx) {
 
     ctx->selectedCharSize    = 10 << 6;
     ctx->currentFont         = NULL;
+    ctx->currentFontSize         = NULL;
     ctx->selectedFontName[0] = 0;
     ctx->pattern             = NULL;
     ctx->curColor            = 0xff000000; // opaque black
     ctx->cmdStarted          = false;
     ctx->curClipState        = vkvg_clip_state_none;
-
+    ctx->mat1                = VKVG_IDENTITY_MATRIX;
 
     ctx->vertCount = ctx->indCount = 0;
 #ifdef VKVG_ENABLE_VK_TIMELINE_SEMAPHORE
@@ -404,10 +405,19 @@ void vkvg_arc(VkvgContext ctx, float xc, float yc, float radius, float a1, float
     if (a2 - a1 > 2.f * M_PIF) // limit arc to 2PI
         a2 = a1 + 2.f * M_PIF;
 
-    vec2 v = {cosf(a1) * radius + xc, sinf(a1) * radius + yc};
+    float sx = 1.0, sy = 1.0;
+    //vkvg_matrix_get_scale(&ctx->mat1, &sx, &sy);
+    float tx = 0.f, ty= 0.f;
+    //vkvg_matrix_get_translation(&ctx->mat1, &tx, &ty);
 
-    float step = _get_arc_step(ctx, radius);
+
+    vec2 v = {cosf(a1) * radius * sx + xc+tx, sinf(a1) * radius * sy + yc+ty};
+
+    float step = _get_arc_step(ctx, radius*max(sx, sy));
     float a    = a1;
+
+    
+
 
     if (_current_path_is_empty(ctx)) {
         _set_curve_start(ctx);
@@ -428,8 +438,8 @@ void vkvg_arc(VkvgContext ctx, float xc, float yc, float radius, float a1, float
         return;
 
     while (a < a2) {
-        v.x = cosf(a) * radius + xc;
-        v.y = sinf(a) * radius + yc;
+        v.x = cosf(a) * radius*sx + xc + tx;
+        v.y = sinf(a) * radius*sy + yc + ty;
         _add_point(ctx, v.x, v.y);
         a += step;
     }
@@ -441,8 +451,8 @@ void vkvg_arc(VkvgContext ctx, float xc, float yc, float radius, float a1, float
     }
     a = a2;
     // vec2 lastP = v;
-    v.x = cosf(a) * radius + xc;
-    v.y = sinf(a) * radius + yc;
+    v.x = cosf(a) * radius * sx + xc+tx;
+    v.y = sinf(a) * radius * sx + yc+ty;
     // if (!vec2_equ (v,lastP))//this test should not be required
     _add_point(ctx, v.x, v.y);
     _set_curve_end(ctx);
@@ -554,7 +564,7 @@ void _curve_to(VkvgContext ctx, float x1, float y1, float x2, float y2, float x3
 
     // compute dyn distanceTolerance depending on current scale
     float sx = 1, sy = 1;
-    vkvg_matrix_get_scale(&ctx->pushConsts.mat, &sx, &sy);
+    vkvg_matrix_get_scale(&ctx->mat1, &sx, &sy);
     float distanceTolerance = fabs(0.25f / fmaxf(sx, sy));
 
     _recursive_bezier(ctx, distanceTolerance, cp.x, cp.y, x1, y1, x2, y2, x3, y3, 0);
@@ -1362,6 +1372,7 @@ void vkvg_save(VkvgContext ctx) {
     strcpy(sav->selectedFontName, ctx->selectedFontName);
 
     sav->currentFont   = ctx->currentFont;
+    sav->currentFontSize   = ctx->currentFontSize;
     sav->textDirection = ctx->textDirection;
     sav->pushConsts    = ctx->pushConsts;
     if (ctx->pattern) {
@@ -1369,6 +1380,7 @@ void vkvg_save(VkvgContext ctx) {
         vkvg_pattern_reference(ctx->pattern);
     } else
         sav->curColor = ctx->curColor;
+    sav->mat1 = ctx->mat1;
 
     sav->pNext      = ctx->pSavedCtxs;
     ctx->pSavedCtxs = sav;
@@ -1496,6 +1508,7 @@ void vkvg_restore(VkvgContext ctx) {
     strcpy(ctx->selectedFontName, sav->selectedFontName);
 
     ctx->currentFont   = sav->currentFont;
+    ctx->currentFontSize   = sav->currentFontSize;
     ctx->textDirection = sav->textDirection;
 
     if (sav->pattern) {
@@ -1507,6 +1520,7 @@ void vkvg_restore(VkvgContext ctx) {
         ctx->curColor = sav->curColor;
         _update_cur_pattern(ctx, NULL);
     }
+    ctx->mat1 = sav->mat1;
 
     _free_ctx_save(sav);
 }
@@ -1517,7 +1531,7 @@ void vkvg_translate(VkvgContext ctx, float dx, float dy) {
     RECORD(ctx, VKVG_CMD_TRANSLATE, dx, dy);
     LOG(VKVG_LOG_INFO_CMD, "CMD: translate: %f, %f\n", dx, dy);
     _emit_draw_cmd_undrawn_vertices(ctx);
-    vkvg_matrix_translate(&ctx->pushConsts.mat, dx, dy);
+    vkvg_matrix_translate(&ctx->mat1, dx, dy);
     _set_mat_inv_and_vkCmdPush(ctx);
 }
 void vkvg_scale(VkvgContext ctx, float sx, float sy) {
@@ -1526,7 +1540,7 @@ void vkvg_scale(VkvgContext ctx, float sx, float sy) {
     RECORD(ctx, VKVG_CMD_SCALE, sx, sy);
     LOG(VKVG_LOG_INFO_CMD, "CMD: scale: %f, %f\n", sx, sy);
     _emit_draw_cmd_undrawn_vertices(ctx);
-    vkvg_matrix_scale(&ctx->pushConsts.mat, sx, sy);
+    vkvg_matrix_scale(&ctx->mat1, sx, sy);
     _set_mat_inv_and_vkCmdPush(ctx);
 }
 void vkvg_rotate(VkvgContext ctx, float radians) {
@@ -1535,7 +1549,7 @@ void vkvg_rotate(VkvgContext ctx, float radians) {
     RECORD(ctx, VKVG_CMD_ROTATE, radians);
     LOG(VKVG_LOG_INFO_CMD, "CMD: rotate: %f\n", radians);
     _emit_draw_cmd_undrawn_vertices(ctx);
-    vkvg_matrix_rotate(&ctx->pushConsts.mat, radians);
+    vkvg_matrix_rotate(&ctx->mat1, radians);
     _set_mat_inv_and_vkCmdPush(ctx);
 }
 void vkvg_transform(VkvgContext ctx, const vkvg_matrix_t *matrix) {
@@ -1546,8 +1560,8 @@ void vkvg_transform(VkvgContext ctx, const vkvg_matrix_t *matrix) {
         matrix->x0, matrix->y0);
     _emit_draw_cmd_undrawn_vertices(ctx);
     vkvg_matrix_t res;
-    vkvg_matrix_multiply(&res, &ctx->pushConsts.mat, matrix);
-    ctx->pushConsts.mat = res;
+    vkvg_matrix_multiply(&res, &ctx->mat1, matrix);
+    ctx->mat1= res;
     _set_mat_inv_and_vkCmdPush(ctx);
 }
 void vkvg_identity_matrix(VkvgContext ctx) {
@@ -1557,7 +1571,7 @@ void vkvg_identity_matrix(VkvgContext ctx) {
     LOG(VKVG_LOG_INFO_CMD, "CMD: identity_matrix:\n");
     _emit_draw_cmd_undrawn_vertices(ctx);
     vkvg_matrix_t im    = VKVG_IDENTITY_MATRIX;
-    ctx->pushConsts.mat = im;
+    ctx->mat1 = im;
     _set_mat_inv_and_vkCmdPush(ctx);
 }
 void vkvg_set_matrix(VkvgContext ctx, const vkvg_matrix_t *matrix) {
@@ -1567,13 +1581,13 @@ void vkvg_set_matrix(VkvgContext ctx, const vkvg_matrix_t *matrix) {
     LOG(VKVG_LOG_INFO_CMD, "CMD: set_matrix: %f, %f, %f, %f, %f, %f\n", matrix->xx, matrix->yx, matrix->xy, matrix->yy,
         matrix->x0, matrix->y0);
     _emit_draw_cmd_undrawn_vertices(ctx);
-    ctx->pushConsts.mat = (*matrix);
+    ctx->mat1 = (*matrix);
     _set_mat_inv_and_vkCmdPush(ctx);
 }
 void vkvg_get_matrix(VkvgContext ctx, vkvg_matrix_t *const matrix) {
     if (vkvg_status(ctx) || !matrix)
         return;
-    *matrix = ctx->pushConsts.mat;
+    *matrix = ctx->mat1;
 }
 
 void vkvg_elliptic_arc_to(VkvgContext ctx, float x2, float y2, bool largeArc, bool sweepFlag, float rx, float ry,

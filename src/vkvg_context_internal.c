@@ -225,6 +225,7 @@ void _add_point(VkvgContext ctx, float x, float y) {
         LOG(VKVG_LOG_DEBUG, "_add_point: (%f, %f)\n", x, y);
         return;
     }
+    vkvg_matrix_transform_point(&ctx->mat1, &x, &y);
     vec2 v = {x, y};
     /*if (!_current_path_is_empty(ctx) && vec2_length(vec2_sub(ctx->points[ctx->pointCount-1], v))<1.f)
         return;*/
@@ -244,7 +245,7 @@ float _normalizeAngle(float a) {
 }
 float _get_arc_step(VkvgContext ctx, float radius) {
     float sx, sy;
-    vkvg_matrix_get_scale(&ctx->pushConsts.mat, &sx, &sy);
+    vkvg_matrix_get_scale(&ctx->mat1, &sx, &sy);
     float r = radius * fabsf(fmaxf(sx, sy));
     if (r < 30.0f)
         return fminf(M_PIF / 3.f, M_PIF / r);
@@ -611,6 +612,9 @@ void _bind_draw_pipeline(VkvgContext ctx) {
     case VKVG_OPERATOR_CLEAR:
         CmdBindPipeline(ctx->cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ctx->dev->pipe_CLEAR);
         break;
+    case VKVG_OPERATOR_SOURCE:
+        CmdBindPipeline(ctx->cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ctx->dev->pipe_SOURCE);
+        break;
     case VKVG_OPERATOR_DIFFERENCE:
         CmdBindPipeline(ctx->cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, ctx->dev->pipe_SUB);
         break;
@@ -670,8 +674,8 @@ void _start_cmd_for_render_pass(VkvgContext ctx) {
 // compute inverse mat used in shader when context matrix has changed
 // then trigger push constants command
 void _set_mat_inv_and_vkCmdPush(VkvgContext ctx) {
-    ctx->pushConsts.matInv = ctx->pushConsts.mat;
-    vkvg_matrix_invert(&ctx->pushConsts.matInv);
+    ctx->pushConsts.matInv2 = ctx->pushConsts.mat2;
+    vkvg_matrix_invert(&ctx->pushConsts.matInv2);
     ctx->pushCstDirty = true;
 }
 void _update_push_constants(VkvgContext ctx) {
@@ -766,7 +770,7 @@ void _update_cur_pattern(VkvgContext ctx, VkvgPattern pat) {
             //     mat = VKVG_IDENTITY_MATRIX;
             // vkvg_matrix_transform_point(&mat, &ctx->pushConsts.source.x, &ctx->pushConsts.source.y);
             // vkvg_matrix_transform_distance(&mat, &ctx->pushConsts.source.width, &ctx->pushConsts.source.height);
-            vkvg_matrix_multiply(&ctx->pushConsts.matInv, &ctx->pushConsts.matInv, &mat);
+            vkvg_matrix_multiply(&ctx->pushConsts.matInv2, &ctx->pushConsts.matInv2, &mat);
         }
 
         break;
@@ -802,23 +806,23 @@ void _update_cur_pattern(VkvgContext ctx, VkvgPattern pat) {
             vkvg_matrix_transform_point(&mat, &grad.cp[0].x, &grad.cp[0].y);
         }
 
-        vkvg_matrix_transform_point(&ctx->pushConsts.mat, &grad.cp[0].x, &grad.cp[0].y);
+        vkvg_matrix_transform_point(&ctx->mat1, &grad.cp[0].x, &grad.cp[0].y);
         if (pat->type == VKVG_PATTERN_TYPE_LINEAR) {
             if (pat->hasMatrix)
                 vkvg_matrix_transform_point(&mat, &grad.cp[0].z, &grad.cp[0].w);
-            vkvg_matrix_transform_point(&ctx->pushConsts.mat, &grad.cp[0].z, &grad.cp[0].w);
+            vkvg_matrix_transform_point(&ctx->mat1, &grad.cp[0].z, &grad.cp[0].w);
         } else {
             if (pat->hasMatrix)
                 vkvg_matrix_transform_point(&mat, &grad.cp[1].x, &grad.cp[1].y);
-            vkvg_matrix_transform_point(&ctx->pushConsts.mat, &grad.cp[1].x, &grad.cp[1].y);
+            vkvg_matrix_transform_point(&ctx->mat1, &grad.cp[1].x, &grad.cp[1].y);
 
             // radii
             if (pat->hasMatrix) {
                 vkvg_matrix_transform_distance(&mat, &grad.cp[0].z, &grad.cp[0].w);
                 vkvg_matrix_transform_distance(&mat, &grad.cp[1].z, &grad.cp[0].w);
             }
-            vkvg_matrix_transform_distance(&ctx->pushConsts.mat, &grad.cp[0].z, &grad.cp[0].w);
-            vkvg_matrix_transform_distance(&ctx->pushConsts.mat, &grad.cp[1].z, &grad.cp[0].w);
+            vkvg_matrix_transform_distance(&ctx->mat1, &grad.cp[0].z, &grad.cp[0].w);
+            vkvg_matrix_transform_distance(&ctx->mat1, &grad.cp[1].z, &grad.cp[0].w);
         }
 
         memcpy(vkh_buffer_get_mapped_pointer(&ctx->uboGrad), &grad, sizeof(vkvg_gradient_t));
@@ -1624,7 +1628,7 @@ void _poly_fill(VkvgContext ctx, vec4 *bounds) {
                     continue;
                 // bounds are computed here to scissor the painting operation
                 // that speed up fill drastically.
-                vkvg_matrix_transform_point(&ctx->pushConsts.mat, &v.pos.x, &v.pos.y);
+                vkvg_matrix_transform_point(&ctx->mat1, &v.pos.x, &v.pos.y);
 
                 if (v.pos.x < bounds->xMin)
                     bounds->xMin = v.pos.x;
@@ -1831,7 +1835,7 @@ void _fill_non_zero(VkvgContext ctx) {
                     break;
                 }
                 ear_clip_point *v0 = ecp_current->next, *v1 = ecp_current, *v2 = ecp_current->next->next;
-                if (ecp_zcross(v0, v2, v1) < 0) {
+                if (ecp_zcross(v0, v2, v1) > 0) {
                     ecp_current = ecp_current->next;
                     tries++;
                     continue;
@@ -1890,7 +1894,7 @@ void _vkvg_path_extents(VkvgContext ctx, bool transformed, float *x1, float *y1,
         for (uint32_t i = firstPtIdx; i < firstPtIdx + pathPointCount; i++) {
             vec2 p = ctx->points[i];
             if (transformed)
-                vkvg_matrix_transform_point(&ctx->pushConsts.mat, &p.x, &p.y);
+                vkvg_matrix_transform_point(&ctx->mat1, &p.x, &p.y);
             if (p.x < xMin)
                 xMin = p.x;
             if (p.x > xMax)

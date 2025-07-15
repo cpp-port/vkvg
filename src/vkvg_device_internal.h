@@ -92,6 +92,7 @@ typedef struct _vkvg_device_t {
     VkPipeline pipe_OVER; /**< default operator */
     VkPipeline pipe_SUB;
     VkPipeline pipe_CLEAR; /**< clear operator */
+    VkPipeline pipe_SOURCE; /**< source operator */
 
     VkPipeline pipelinePolyFill; /**< even-odd polygon filling first step */
     VkPipeline pipelineClipping; /**< draw on stencil to update clipping regions */

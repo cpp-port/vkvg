@@ -227,3 +227,9 @@ void vkvg_matrix_get_scale(const vkvg_matrix_t *matrix, float *sx, float *sy) {
     /*if (matrix->yy < 0)
      *sy = -*sy;*/
 }
+
+void vkvg_matrix_get_translation(const vkvg_matrix_t* matrix, float* tx, float* ty) 
+{
+    *tx = matrix->x0;
+    *ty = matrix->y0;
+}

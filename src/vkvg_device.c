@@ -283,6 +283,23 @@ const void *vkvg_get_device_requirements(VkPhysicalDeviceFeatures *pEnabledFeatu
     return pNext;
 }
 
+
+ VkSampleCountFlagBits get_max_sample_count(VkSampleCountFlags counts) {
+    if (counts & VK_SAMPLE_COUNT_64_BIT)
+        return VK_SAMPLE_COUNT_64_BIT;
+    if (counts & VK_SAMPLE_COUNT_32_BIT)
+        return VK_SAMPLE_COUNT_32_BIT;
+    if (counts & VK_SAMPLE_COUNT_16_BIT)
+        return VK_SAMPLE_COUNT_16_BIT;
+    if (counts & VK_SAMPLE_COUNT_8_BIT)
+        return VK_SAMPLE_COUNT_8_BIT;
+    if (counts & VK_SAMPLE_COUNT_4_BIT)
+        return VK_SAMPLE_COUNT_4_BIT;
+    if (counts & VK_SAMPLE_COUNT_2_BIT)
+        return VK_SAMPLE_COUNT_2_BIT;
+    return VK_SAMPLE_COUNT_1_BIT;
+}
+
 VkvgDevice vkvg_device_create(vkvg_device_create_info_t *info) {
     LOG(VKVG_LOG_INFO, "CREATE Device\n");
     if (!info) {
@@ -394,6 +411,19 @@ VkvgDevice vkvg_device_create(vkvg_device_create_info_t *info) {
         info->qFamIdx = pi->gQueue;
         info->qIndex  = 0;
     }
+    else
+    {
+
+       VkPhysicalDeviceProperties props;
+        vkGetPhysicalDeviceProperties(info->phy, &props);
+       VkSampleCountFlags colorCounts = props.limits.framebufferColorSampleCounts;
+       VkSampleCountFlags depthCounts = props.limits.framebufferDepthSampleCounts;
+
+       VkSampleCountFlags counts = colorCounts & depthCounts;
+
+       info->samples = get_max_sample_count(counts);
+      
+    }
 
     _device_init(dev, info);
 
@@ -442,6 +472,7 @@ void vkvg_device_destroy(VkvgDevice dev) {
     vkDestroyPipeline(dev->vkDev, dev->pipe_OVER, NULL);
     vkDestroyPipeline(dev->vkDev, dev->pipe_SUB, NULL);
     vkDestroyPipeline(dev->vkDev, dev->pipe_CLEAR, NULL);
+    vkDestroyPipeline(dev->vkDev, dev->pipe_SOURCE, NULL);
 
 #ifdef VKVG_WIRED_DEBUG
     vkDestroyPipeline(dev->vkDev, dev->pipelineWired, NULL);
