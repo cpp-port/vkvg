@@ -317,8 +317,8 @@ VkvgDevice vkvg_device_create(vkvg_device_create_info_t *info) {
     dev->threadAware = info->threadAware;
     if (dev->threadAware) {
         mtx_init(&dev->mutex, mtx_plain);
-        mtx_init(&dev->fontCache->mutex, mtx_plain);
-        dev->threadAware = true;
+    //    mtx_init(&dev->fontCache->mutex, mtx_plain);
+        //dev->threadAware = true;
     }
 
     if (!info->vkdev) {
