@@ -8,6 +8,11 @@
 #include "vkvg_pattern.h"
 #include "vkh_queue.h"
 
+
+#ifndef max
+#define max(a,b) ((a) > (b) ? (a) : (b))
+#endif
+
 #ifdef DEBUG
 static vec2     debugLinePoints[1000];
 static uint32_t dlpCount = 0;
