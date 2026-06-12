@@ -345,33 +345,12 @@ _char_ref *_prepare_char(VkvgDevice dev, VkvgText tr, uint32_t gindex) {
             data[(penX + x + y * FONT_PAGE_SIZE) * 4 + 2] = r;
             data[(penX + x + y * FONT_PAGE_SIZE) * 4 + 3] = (r + g + b) / 3;
 #else
-#ifdef WIN32
-            data[penX + x + y * FONT_PAGE_SIZE] = buffer[x + (bmpRows -y-1) * bmpPixelWidth];
-#else
-            data[penX + x + y * FONT_PAGE_SIZE] = buffer[x + y * bmpPixelWidth];
-#endif
+            data[penX + x + y * FONT_PAGE_SIZE] = buffer[x + y * bmp.pitch];
 #endif
         }
     }
 
-    #ifdef WIN32
-//    int   timesize = bmpPixelWidth;
-//    int   scan     = FONT_PAGE_SIZE;
-//    char* ptime    = (char*)malloc(timesize);
-//    char* pdata    = (char*)(data + penX);
-//    for (int i = 0; i < bmpRows / 2; i++) {
-//        char* plineBeg = pdata + scan * i;
-//        char* plineEnd = pdata + scan * (bmpRows - i - 1);
-//        memcpy(ptime, plineBeg, timesize);
-//        memcpy(plineBeg, plineEnd, timesize);
-//        memcpy(plineEnd, ptime, timesize);
-//    }
-//    free(ptime);
-    cr->bmpDiff.y = (int16_t)bmpRows - slot->bitmap_top;
-#else
     cr->bmpDiff.y = (int16_t)slot->bitmap_top;
-//
-#endif
 
     cr->bmpDiff.x = (int16_t)slot->bitmap_left;
     cr->advance   = slot->advance;
@@ -380,26 +359,7 @@ _char_ref *_prepare_char(VkvgDevice dev, VkvgText tr, uint32_t gindex) {
     int      lsb;
     stbtt_GetGlyphHMetrics(pStbInfo, gindex, &advance, &lsb);
     stbtt_MakeGlyphBitmap(pStbInfo, data + penX, bmpPixelWidth, bmpRows, FONT_PAGE_SIZE, f->scale, f->scale, gindex);
-#ifdef WIN32
-    int                                timesize = bmpPixelWidth;
-    int                                scan   = FONT_PAGE_SIZE;
-    char*                              ptime    = (char*)malloc(timesize);
-    char*                              pdata  = (char*)(data + penX);
-    for (int i = 0; i < bmpRows / 2; i++)
-    {
-        char * plineBeg = pdata + scan * i;
-        char * plineEnd = pdata + scan * (bmpRows - i -1);
-        memcpy(ptime, plineBeg, timesize);
-        memcpy(plineBeg, plineEnd, timesize);
-        memcpy(plineEnd, ptime, timesize);
-
-    }
-    free(ptime);
-    cr->bmpDiff.y = (int16_t)bmpRows + c_y1;
-#else
     cr->bmpDiff.y = (int16_t)-c_y1;
-
-#endif
 
 
     cr->bmpDiff.x = (int16_t)c_x1;
